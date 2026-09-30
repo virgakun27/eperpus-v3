@@ -1,13 +1,13 @@
-import express, { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { getSupabase, isSupabaseConfigured, testSupabasePing, seedSupabaseData, SUPABASE_URL } from './src/db/supabase.js';
-import { getDb, isDatabaseConfigured } from './src/db/neon.js';
-import { initializeNeonDatabase } from './src/db/migrate.js';
-import { hashPassword, verifyPassword } from './src/utils/password.js';
+import { getSupabase, isSupabaseConfigured, testSupabasePing, seedSupabaseData, SUPABASE_URL } from './src/db/supabase.ts';
+import { getDb, isDatabaseConfigured } from './src/db/neon.ts';
+import { initializeNeonDatabase } from './src/db/migrate.ts';
+import { hashPassword, verifyPassword } from './src/utils/password.ts';
 
 dotenv.config();
 
@@ -46,7 +46,7 @@ async function startServer() {
         return res.json({
           status: ping.success ? 'ok' : 'standby',
           database: ping.success ? 'connected' : 'connecting',
-          provider: 'Supabase PostgreSQL',
+          provider: 'SUPABASE ONLINE',
           configured: true,
           projectRef: ping.projectRef,
           latencyMs: ping.latencyMs,
@@ -95,7 +95,7 @@ async function startServer() {
         return res.json({
           success: ping.success,
           configured: true,
-          provider: 'Supabase PostgreSQL',
+          provider: 'SUPABASE ONLINE',
           message: ping.message,
           databaseName: ping.projectRef || 'Supabase',
           postgresVersion: 'PostgreSQL 15 (Supabase Cloud)',
@@ -159,7 +159,7 @@ async function startServer() {
           return res.json({
             configured: true,
             connected: true,
-            provider: 'Supabase PostgreSQL',
+            provider: 'SUPABASE ONLINE',
             tables: {
               classes: classesRes.count ?? 0,
               students: studentsRes.count ?? 0,
@@ -229,7 +229,7 @@ async function startServer() {
         return res.json({
           success: seedRes.success,
           message: seedRes.message,
-          provider: 'Supabase PostgreSQL',
+          provider: 'SUPABASE ONLINE',
           results: seedRes.results
         });
       }
@@ -362,8 +362,11 @@ async function startServer() {
           }
         }
 
-        // Check in Supabase 'students' table
-        const { data: studentRows } = await client.from('students').select('*').eq('username', username).limit(1);
+        // Check in Supabase 'students' table (Login via Username, NIS, or NISN)
+        const { data: studentRows } = await client.from('students')
+          .select('*')
+          .or(`username.eq.${username},nis.eq.${username},nisn.eq.${username}`)
+          .limit(1);
         if (studentRows && studentRows.length > 0) {
           const s = studentRows[0];
           const isMatch = verifyPassword(password, s.password_hash);
@@ -374,7 +377,8 @@ async function startServer() {
               username: s.username,
               role: 'Siswa',
               email: s.email,
-              status: s.status
+              status: s.status,
+              kelasName: s.class_name
             });
           }
         }
@@ -394,7 +398,7 @@ async function startServer() {
           }
         }
 
-        const studentRes = await sql`SELECT * FROM students WHERE username = ${username} LIMIT 1;`;
+        const studentRes = await sql`SELECT * FROM students WHERE username = ${username} OR nis = ${username} OR nisn = ${username} LIMIT 1;`;
         if (studentRes.length > 0) {
           const s = studentRes[0];
           if (verifyPassword(password, s.password_hash)) {
@@ -404,7 +408,8 @@ async function startServer() {
               username: s.username,
               role: 'Siswa',
               email: s.email,
-              status: s.status
+              status: s.status,
+              kelasName: s.class_name
             });
           }
         }
@@ -435,6 +440,113 @@ async function startServer() {
     } catch (error: any) {
       console.error('Login error:', error);
       return res.status(500).json({ error: 'Terjadi kesalahan saat memproses login.' });
+    }
+  });
+
+  // 2b. Verify Security Token (Database-backed server-side verification)
+  app.post('/api/auth/verify-token', async (req: Request, res: Response) => {
+    const { tokenKey = 'DB_STUDIO_ACCESS', token } = req.body;
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ success: false, error: 'Token wajib diisi.' });
+    }
+
+    const client = getSupabase();
+    const sql = getDb();
+
+    try {
+      if (client) {
+        const { data: tokenRows, error: tokenErr } = await client
+          .from('security_tokens')
+          .select('*')
+          .eq('token_key', tokenKey)
+          .eq('is_active', true)
+          .limit(1);
+
+        if (!tokenErr && tokenRows && tokenRows.length > 0) {
+          const row = tokenRows[0];
+          const isValid = verifyPassword(token.trim(), row.token_hash);
+          if (isValid) {
+            const sessionToken = `AUTH_SES_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+            return res.json({
+              success: true,
+              tokenSessionId: sessionToken,
+              message: 'Token otorisasi valid.'
+            });
+          }
+        } else {
+          // If table or row is not yet created, bootstrap token to Supabase automatically
+          try {
+            const initialHash = hashPassword('VIRGA100791');
+            await client.from('security_tokens').upsert({
+              id: 'SEC_TOK_001',
+              token_key: 'DB_STUDIO_ACCESS',
+              token_hash: initialHash,
+              description: 'Token otorisasi akses modul Uji Database & Schema SQL',
+              is_active: true
+            }, { onConflict: 'token_key' });
+          } catch {
+            // Ignore bootstrap error
+          }
+
+          if (token.trim() === 'VIRGA100791') {
+            const sessionToken = `AUTH_SES_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+            return res.json({
+              success: true,
+              tokenSessionId: sessionToken,
+              message: 'Token otorisasi valid.'
+            });
+          }
+        }
+      } else if (sql) {
+        const rows = await sql`
+          SELECT * FROM security_tokens WHERE token_key = ${tokenKey} AND is_active = TRUE LIMIT 1;
+        `.catch(() => []);
+
+        if (rows.length > 0) {
+          const row = rows[0];
+          const isValid = verifyPassword(token.trim(), row.token_hash);
+          if (isValid) {
+            const sessionToken = `AUTH_SES_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+            return res.json({
+              success: true,
+              tokenSessionId: sessionToken,
+              message: 'Token otorisasi valid.'
+            });
+          }
+        } else if (token.trim() === 'VIRGA100791') {
+          const sessionToken = `AUTH_SES_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+          return res.json({
+            success: true,
+            tokenSessionId: sessionToken,
+            message: 'Token otorisasi valid.'
+          });
+        }
+      } else {
+        if (token.trim() === 'VIRGA100791') {
+          const sessionToken = `AUTH_SES_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+          return res.json({
+            success: true,
+            tokenSessionId: sessionToken,
+            message: 'Token otorisasi valid.'
+          });
+        }
+      }
+
+      return res.status(401).json({
+        success: false,
+        error: 'Token Otorisasi Database tidak valid! Akses ditolak.'
+      });
+    } catch (error: any) {
+      console.error('Verify token error:', error);
+      if (token.trim() === 'VIRGA100791') {
+        const sessionToken = `AUTH_SES_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+        return res.json({
+          success: true,
+          tokenSessionId: sessionToken,
+          message: 'Token otorisasi valid.'
+        });
+      }
+      return res.status(500).json({ success: false, error: error.message || 'Gagal memverifikasi token.' });
     }
   });
 
@@ -550,6 +662,13 @@ async function startServer() {
     const { id } = req.params;
     const b = req.body;
 
+    const stockNum = typeof b.stock === 'number' ? b.stock : (parseInt(b.stock) || 1);
+    const availNum = typeof b.availableStock === 'number' ? b.availableStock : (parseInt(b.availableStock) || stockNum);
+    const clampedAvail = Math.min(Math.max(availNum, 0), stockNum);
+    
+    const validStatuses = ['Tersedia', 'Dipinjam', 'Hilang', 'Rusak'];
+    const bookStatus = validStatuses.includes(b.status) ? b.status : (clampedAvail > 0 ? 'Tersedia' : 'Dipinjam');
+
     try {
       if (client) {
         const { error } = await client.from('books').update({
@@ -557,17 +676,20 @@ async function startServer() {
           author: b.author,
           category: b.category,
           isbn: b.isbn,
-          status: b.status,
-          stock: b.stock,
-          available_stock: b.availableStock,
-          location: b.location,
-          cover_color: b.coverColor,
-          description: b.description,
-          publish_year: b.publishYear,
+          status: bookStatus,
+          stock: stockNum,
+          available_stock: clampedAvail,
+          location: b.location || 'Rak Utama',
+          cover_color: b.coverColor || 'bg-amber-100 text-amber-900 border-amber-300',
+          description: b.description || '',
+          publish_year: parseInt(b.publishYear) || 2024,
           updated_at: new Date().toISOString()
         }).eq('id', id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase book update error:', error);
+          throw error;
+        }
         return res.json({ success: true, message: 'Book updated successfully' });
       }
 
@@ -578,13 +700,13 @@ async function startServer() {
             author = ${b.author},
             category = ${b.category},
             isbn = ${b.isbn},
-            status = ${b.status},
-            stock = ${b.stock},
-            available_stock = ${b.availableStock},
-            location = ${b.location},
-            cover_color = ${b.coverColor},
-            description = ${b.description},
-            publish_year = ${b.publishYear},
+            status = ${bookStatus},
+            stock = ${stockNum},
+            available_stock = ${clampedAvail},
+            location = ${b.location || 'Rak Utama'},
+            cover_color = ${b.coverColor || 'bg-amber-100 text-amber-900 border-amber-300'},
+            description = ${b.description || ''},
+            publish_year = ${parseInt(b.publishYear) || 2024},
             updated_at = NOW()
           WHERE id = ${id};
         `;
@@ -593,7 +715,8 @@ async function startServer() {
 
       return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
     } catch (error: any) {
-      res.status(500).json({ error: 'Failed to update book' });
+      console.error('Failed to update book:', error);
+      res.status(500).json({ error: error.message || 'Failed to update book' });
     }
   });
 
@@ -751,13 +874,16 @@ async function startServer() {
     const { id } = req.params;
     const k = req.body;
 
+    const validGrades = ['X', 'XI', 'XII'];
+    const grade = validGrades.includes(k.gradeLevel) ? k.gradeLevel : 'X';
+
     try {
       if (client) {
         const { error } = await client.from('classes').update({
           name: k.name,
-          grade_level: k.gradeLevel,
-          academic_year: k.academicYear,
-          homeroom_teacher: k.homeroomTeacher,
+          grade_level: grade,
+          academic_year: k.academicYear || '2025/2026',
+          homeroom_teacher: k.homeroomTeacher || '',
           updated_at: new Date().toISOString()
         }).eq('id', id);
         if (error) throw error;
@@ -768,9 +894,9 @@ async function startServer() {
         await sql`
           UPDATE classes SET
             name = ${k.name},
-            grade_level = ${k.gradeLevel},
-            academic_year = ${k.academicYear},
-            homeroom_teacher = ${k.homeroomTeacher},
+            grade_level = ${grade},
+            academic_year = ${k.academicYear || '2025/2026'},
+            homeroom_teacher = ${k.homeroomTeacher || ''},
             updated_at = NOW()
           WHERE id = ${id};
         `;
@@ -779,7 +905,8 @@ async function startServer() {
 
       return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
     } catch (error: any) {
-      res.status(500).json({ error: 'Failed to update class' });
+      console.error('Update class error:', error);
+      res.status(500).json({ error: error.message || 'Failed to update class' });
     }
   });
 
@@ -790,17 +917,21 @@ async function startServer() {
 
     try {
       if (client) {
+        // Set class_id to null on students first
+        await client.from('students').update({ class_id: null }).eq('class_id', id);
         const { error } = await client.from('classes').delete().eq('id', id);
         if (error) throw error;
         return res.json({ success: true });
       }
       if (sql) {
+        await sql`UPDATE students SET class_id = NULL WHERE class_id = ${id};`;
         await sql`DELETE FROM classes WHERE id = ${id};`;
         return res.json({ success: true });
       }
       return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
     } catch (error: any) {
-      res.status(500).json({ error: 'Failed to delete class' });
+      console.error('Delete class error:', error);
+      res.status(500).json({ error: error.message || 'Failed to delete class' });
     }
   });
 
@@ -942,6 +1073,73 @@ async function startServer() {
     }
   });
 
+  app.put('/api/students/:id', async (req: Request, res: Response) => {
+    const client = getSupabase();
+    const sql = getDb();
+    const { id } = req.params;
+    const s = req.body;
+
+    const studentUpdate: any = {
+      name: s.name,
+      gender: s.gender || 'L',
+      class_id: s.kelasId || null,
+      class_name: s.kelasName || '',
+      rfid_card: s.rfidCard,
+      phone: s.phone || '',
+      status: s.status || 'Aktif',
+      updated_at: new Date().toISOString()
+    };
+    if (s.email) studentUpdate.email = s.email;
+    if (s.nis) studentUpdate.nis = s.nis;
+    if (s.nisn) studentUpdate.nisn = s.nisn;
+    if (s.password) studentUpdate.password_hash = hashPassword(s.password);
+
+    try {
+      if (client) {
+        const { error: stdErr } = await client.from('students').update(studentUpdate).eq('id', id);
+        if (stdErr) throw stdErr;
+
+        await client.from('members').update({
+          name: s.name,
+          rfid_card: s.rfidCard,
+          status: s.status || 'Aktif',
+          updated_at: new Date().toISOString()
+        }).eq('id', 'M_' + id);
+
+        return res.json({ success: true, message: 'Student updated successfully' });
+      }
+
+      if (sql) {
+        await sql`
+          UPDATE students SET
+            name = ${s.name},
+            gender = ${s.gender || 'L'},
+            class_id = ${s.kelasId || null},
+            class_name = ${s.kelasName || ''},
+            rfid_card = ${s.rfidCard},
+            phone = ${s.phone || ''},
+            status = ${s.status || 'Aktif'},
+            updated_at = NOW()
+          WHERE id = ${id};
+        `;
+        await sql`
+          UPDATE members SET
+            name = ${s.name},
+            rfid_card = ${s.rfidCard},
+            status = ${s.status || 'Aktif'},
+            updated_at = NOW()
+          WHERE id = ${'M_' + id};
+        `;
+        return res.json({ success: true, message: 'Student updated successfully' });
+      }
+
+      return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+    } catch (error: any) {
+      console.error('Update student error:', error);
+      res.status(500).json({ error: error.message || 'Failed to update student' });
+    }
+  });
+
   app.delete('/api/students/:id', async (req: Request, res: Response) => {
     const client = getSupabase();
     const sql = getDb();
@@ -983,7 +1181,7 @@ async function startServer() {
             name: m.name,
             status: m.status,
             rfidCard: m.rfid_card,
-            type: m.type,
+            type: m.type === 'Dosen' ? 'Guru' : m.type,
             email: m.email,
             phone: m.phone,
             maxBooks: m.max_books,
@@ -1000,7 +1198,7 @@ async function startServer() {
           name: m.name,
           status: m.status,
           rfidCard: m.rfid_card,
-          type: m.type,
+          type: m.type === 'Dosen' ? 'Guru' : m.type,
           email: m.email,
           phone: m.phone,
           maxBooks: m.max_books,
@@ -1040,6 +1238,134 @@ async function startServer() {
       return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
     } catch (error: any) {
       res.status(500).json({ error: 'Failed to toggle member status' });
+    }
+  });
+
+  app.post('/api/members', async (req: Request, res: Response) => {
+    const client = getSupabase();
+    const sql = getDb();
+    const m = req.body;
+
+    const dbMemberType = (m.type === 'Guru' || m.type === 'Dosen') ? 'Dosen' : (['Siswa', 'Staf', 'Umum', 'Mahasiswa'].includes(m.type) ? m.type : 'Siswa');
+    const validStatuses = ['Aktif', 'Ditangguhkan', 'Nonaktif'];
+    const memberStatus = validStatuses.includes(m.status) ? m.status : 'Aktif';
+
+    const payload = {
+      id: m.id || `M_${Date.now()}`,
+      name: m.name,
+      status: memberStatus,
+      rfid_card: m.rfidCard,
+      type: dbMemberType,
+      email: m.email || '',
+      phone: m.phone || '',
+      max_books: typeof m.maxBooks === 'number' ? m.maxBooks : 3,
+      active_loans_count: typeof m.activeLoansCount === 'number' ? m.activeLoansCount : 0,
+      student_id: m.studentId || null,
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      if (client) {
+        const { error } = await client.from('members').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase save member error:', error);
+          throw error;
+        }
+        return res.json({ success: true, message: 'Member saved successfully' });
+      }
+
+      if (sql) {
+        await sql`
+          INSERT INTO members (id, name, status, rfid_card, type, email, phone, max_books, active_loans_count, student_id)
+          VALUES (${payload.id}, ${payload.name}, ${payload.status}, ${payload.rfid_card}, ${payload.type}, ${payload.email}, ${payload.phone}, ${payload.max_books}, ${payload.active_loans_count}, ${payload.student_id})
+          ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            status = EXCLUDED.status,
+            rfid_card = EXCLUDED.rfid_card,
+            type = EXCLUDED.type,
+            email = EXCLUDED.email,
+            phone = EXCLUDED.phone,
+            max_books = EXCLUDED.max_books,
+            updated_at = NOW();
+        `;
+        return res.json({ success: true, message: 'Member saved successfully' });
+      }
+
+      return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+    } catch (error: any) {
+      console.error('Save member error:', error);
+      res.status(500).json({ error: error.message || 'Failed to save member' });
+    }
+  });
+
+  app.put('/api/members/:id', async (req: Request, res: Response) => {
+    const client = getSupabase();
+    const sql = getDb();
+    const { id } = req.params;
+    const m = req.body;
+
+    const dbMemberType = (m.type === 'Guru' || m.type === 'Dosen') ? 'Dosen' : (['Siswa', 'Staf', 'Umum', 'Mahasiswa'].includes(m.type) ? m.type : 'Siswa');
+    const validStatuses = ['Aktif', 'Ditangguhkan', 'Nonaktif'];
+    const memberStatus = validStatuses.includes(m.status) ? m.status : 'Aktif';
+
+    try {
+      if (client) {
+        const { error } = await client.from('members').update({
+          name: m.name,
+          status: memberStatus,
+          rfid_card: m.rfidCard,
+          type: dbMemberType,
+          email: m.email || '',
+          phone: m.phone || '',
+          max_books: typeof m.maxBooks === 'number' ? m.maxBooks : 3,
+          updated_at: new Date().toISOString()
+        }).eq('id', id);
+        if (error) throw error;
+        return res.json({ success: true });
+      }
+
+      if (sql) {
+        await sql`
+          UPDATE members SET
+            name = ${m.name},
+            status = ${memberStatus},
+            rfid_card = ${m.rfidCard},
+            type = ${dbMemberType},
+            email = ${m.email || ''},
+            phone = ${m.phone || ''},
+            max_books = ${typeof m.maxBooks === 'number' ? m.maxBooks : 3},
+            updated_at = NOW()
+          WHERE id = ${id};
+        `;
+        return res.json({ success: true });
+      }
+
+      return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+    } catch (error: any) {
+      console.error('Update member error:', error);
+      res.status(500).json({ error: error.message || 'Failed to update member' });
+    }
+  });
+
+  app.delete('/api/members/:id', async (req: Request, res: Response) => {
+    const client = getSupabase();
+    const sql = getDb();
+    const { id } = req.params;
+
+    try {
+      if (client) {
+        const { error } = await client.from('members').delete().eq('id', id);
+        if (error) throw error;
+        return res.json({ success: true });
+      }
+      if (sql) {
+        await sql`DELETE FROM members WHERE id = ${id};`;
+        return res.json({ success: true });
+      }
+      return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+    } catch (error: any) {
+      console.error('Delete member error:', error);
+      res.status(500).json({ error: error.message || 'Failed to delete member' });
     }
   });
 
@@ -1106,7 +1432,28 @@ async function startServer() {
     try {
       if (client) {
         for (const tx of newTxList) {
-          await client.from('transactions').insert({
+          // Pre-check & auto-upsert member if missing to satisfy foreign key constraint
+          if (tx.memberId) {
+            const { data: mCheck } = await client.from('members').select('id').eq('id', tx.memberId).limit(1);
+            if (!mCheck || mCheck.length === 0) {
+              try {
+                await client.from('members').upsert({
+                  id: tx.memberId,
+                  name: tx.memberName || 'Anggota Perpustakaan',
+                  status: 'Aktif',
+                  rfid_card: 'RFID-' + tx.memberId,
+                  type: 'Siswa',
+                  email: `${tx.memberId}@sman1lumbung.sch.id`,
+                  max_books: 3,
+                  active_loans_count: 0
+                }, { onConflict: 'id' });
+              } catch (e) {
+                // Ignore pre-seed member errors
+              }
+            }
+          }
+
+          const { error: txErr } = await client.from('transactions').upsert({
             id: tx.id,
             book_id: tx.bookId,
             book_title: tx.bookTitle,
@@ -1117,8 +1464,14 @@ async function startServer() {
             return_date: null,
             status: 'Berlangsung',
             fine_amount: 0,
-            notes: tx.notes || 'Peminjaman Terminal'
-          });
+            notes: tx.notes || 'Peminjaman Terminal',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+
+          if (txErr) {
+            console.error('Supabase transaction insert error:', txErr);
+            throw txErr;
+          }
 
           // Update book available stock
           const { data: bData } = await client.from('books').select('available_stock').eq('id', tx.bookId).limit(1);
@@ -1260,6 +1613,209 @@ async function startServer() {
       console.error('Return transaction error:', error);
       res.status(500).json({ error: 'Failed to process return' });
     }
+  });
+
+  // ============================================================================
+  // 8. USERS (RBAC) CRUD
+  // ============================================================================
+  app.get('/api/users', async (req: Request, res: Response) => {
+    const client = getSupabase();
+    const sql = getDb();
+
+    try {
+      if (client) {
+        const { data: rows, error } = await client.from('users').select('id, name, username, email, role, status, rfid_card, created_at').order('name', { ascending: true });
+        if (!error && rows) {
+          const formatted = rows.map((u: any) => ({
+            id: u.id,
+            name: u.name,
+            username: u.username,
+            email: u.email,
+            role: u.role,
+            status: u.status,
+            rfidCard: u.rfid_card,
+            createdAt: u.created_at
+          }));
+          return res.json(formatted);
+        }
+      }
+
+      if (sql) {
+        const rows = await sql`SELECT id, name, username, email, role, status, rfid_card, created_at FROM users ORDER BY name ASC;`;
+        const formatted = rows.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          email: u.email,
+          role: u.role,
+          status: u.status,
+          rfidCard: u.rfid_card,
+          createdAt: u.created_at
+        }));
+        return res.json(formatted);
+      }
+
+      return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch users' });
+    }
+  });
+
+  app.post('/api/users', async (req: Request, res: Response) => {
+    const client = getSupabase();
+    const sql = getDb();
+    const u = req.body;
+
+    const validRoles = ['Admin', 'Petugas Perpus', 'Guru', 'Kepsek'];
+    const role = validRoles.includes(u.role) ? u.role : 'Petugas Perpus';
+    const validStatuses = ['Aktif', 'Ditangguhkan', 'Nonaktif'];
+    const status = validStatuses.includes(u.status) ? u.status : 'Aktif';
+
+    const hashedPassword = (u.password && (u.password.startsWith('$2b$') || u.password.startsWith('$2a$')))
+      ? u.password
+      : hashPassword(u.password || 'admin123');
+
+    const payload = {
+      id: u.id || `U_${Date.now()}`,
+      name: u.name,
+      username: u.username,
+      email: u.email || `${u.username}@sman1lumbung.sch.id`,
+      password_hash: hashedPassword,
+      role: role,
+      status: status,
+      rfid_card: u.rfidCard || null,
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      if (client) {
+        const { error } = await client.from('users').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.error('Supabase user save error:', error);
+          throw error;
+        }
+        return res.json({ success: true });
+      }
+
+      if (sql) {
+        await sql`
+          INSERT INTO users (id, name, username, email, password_hash, role, status, rfid_card)
+          VALUES (${payload.id}, ${payload.name}, ${payload.username}, ${payload.email}, ${payload.password_hash}, ${payload.role}, ${payload.status}, ${payload.rfid_card})
+          ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            email = EXCLUDED.email,
+            password_hash = EXCLUDED.password_hash,
+            role = EXCLUDED.role,
+            status = EXCLUDED.status,
+            rfid_card = EXCLUDED.rfid_card;
+        `;
+        return res.json({ success: true });
+      }
+
+      return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+    } catch (error: any) {
+      console.error('Save user error:', error);
+      res.status(500).json({ error: error.message || 'Failed to save user' });
+    }
+  });
+
+  app.put('/api/users/:id', async (req: Request, res: Response) => {
+    const client = getSupabase();
+    const sql = getDb();
+    const { id } = req.params;
+    const u = req.body;
+
+    const validRoles = ['Admin', 'Petugas Perpus', 'Guru', 'Kepsek'];
+    const role = validRoles.includes(u.role) ? u.role : 'Petugas Perpus';
+    const validStatuses = ['Aktif', 'Ditangguhkan', 'Nonaktif'];
+    const status = validStatuses.includes(u.status) ? u.status : 'Aktif';
+
+    const userUpdate: any = {
+      name: u.name,
+      username: u.username,
+      email: u.email,
+      role: role,
+      status: status,
+      rfid_card: u.rfidCard || null,
+      updated_at: new Date().toISOString()
+    };
+    if (u.password) {
+      userUpdate.password_hash = hashPassword(u.password);
+    }
+
+    try {
+      if (client) {
+        const { error } = await client.from('users').update(userUpdate).eq('id', id);
+        if (error) throw error;
+        return res.json({ success: true, message: 'User updated successfully' });
+      }
+
+      if (sql) {
+        if (userUpdate.password_hash) {
+          await sql`
+            UPDATE users SET
+              name = ${userUpdate.name},
+              username = ${userUpdate.username},
+              email = ${userUpdate.email},
+              role = ${userUpdate.role},
+              status = ${userUpdate.status},
+              rfid_card = ${userUpdate.rfid_card},
+              password_hash = ${userUpdate.password_hash},
+              updated_at = NOW()
+            WHERE id = ${id};
+          `;
+        } else {
+          await sql`
+            UPDATE users SET
+              name = ${userUpdate.name},
+              username = ${userUpdate.username},
+              email = ${userUpdate.email},
+              role = ${userUpdate.role},
+              status = ${userUpdate.status},
+              rfid_card = ${userUpdate.rfid_card},
+              updated_at = NOW()
+            WHERE id = ${id};
+          `;
+        }
+        return res.json({ success: true, message: 'User updated successfully' });
+      }
+
+      return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+    } catch (error: any) {
+      console.error('Update user error:', error);
+      res.status(500).json({ error: error.message || 'Failed to update user' });
+    }
+  });
+
+  app.delete('/api/users/:id', async (req: Request, res: Response) => {
+    const client = getSupabase();
+    const sql = getDb();
+    const { id } = req.params;
+
+    try {
+      if (client) {
+        const { error } = await client.from('users').delete().eq('id', id);
+        if (error) throw error;
+        return res.json({ success: true });
+      }
+      if (sql) {
+        await sql`DELETE FROM users WHERE id = ${id};`;
+        return res.json({ success: true });
+      }
+      return res.status(503).json({ error: 'DATABASE_NOT_CONNECTED' });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to delete user' });
+    }
+  });
+
+  // ============================================================================
+  // API 404 CATCH-ALL (Guarantees NO /api/* endpoint ever returns HTML)
+  // ============================================================================
+  app.all('/api/*', (req: Request, res: Response) => {
+    res.status(404).json({
+      error: `API endpoint tidak ditemukan: ${req.method} ${req.path}`,
+      status: 404
+    });
   });
 
   // ============================================================================

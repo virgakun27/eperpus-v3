@@ -23,13 +23,19 @@ import {
   UserCheck,
   Zap,
   Lock,
-  Sparkles
+  Sparkles,
+  Eye,
+  EyeOff,
+  Shield,
+  ShieldAlert,
+  ArrowLeft
 } from 'lucide-react';
 import { api } from '../utils/api';
 import sound from '../utils/audio';
 
 interface DatabaseStudioProps {
   onDataRefreshed?: () => void;
+  onCancel?: () => void;
 }
 
 interface DatabaseMetrics {
@@ -41,7 +47,16 @@ interface DatabaseMetrics {
   users: number;
 }
 
-export default function DatabaseStudio({ onDataRefreshed }: DatabaseStudioProps) {
+export default function DatabaseStudio({ onDataRefreshed, onCancel }: DatabaseStudioProps) {
+  // Token Authorization State (Stored in DB, verified via secure backend proxy)
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
+    return Boolean(sessionStorage.getItem('ep_db_auth_session'));
+  });
+  const [tokenInput, setTokenInput] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [tokenError, setTokenError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+
   const [testing, setTesting] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(false);
@@ -100,10 +115,13 @@ export default function DatabaseStudio({ onDataRefreshed }: DatabaseStudioProps)
         setDbState({
           configured: statusRes.configured,
           connected: statusRes.connected,
-          provider: statusRes.provider || 'Supabase PostgreSQL'
+          provider: statusRes.provider || 'SUPABASE ONLINE'
         });
         if (statusRes.tables) {
-          setDbMetrics(statusRes.tables);
+          setDbMetrics(prev => ({
+            ...prev,
+            ...statusRes.tables
+          }));
         }
       }
 
@@ -124,7 +142,7 @@ export default function DatabaseStudio({ onDataRefreshed }: DatabaseStudioProps)
   // 1. Test Database Connection
   const handleTestConnection = async () => {
     setTesting(true);
-    addLog('Mengirim perintah PING & query verifikasi ke Supabase PostgreSQL...');
+    addLog('Mengirim perintah PING & query verifikasi ke SUPABASE ONLINE...');
     try {
       const res = await api.testDatabaseConnection();
       setTestResult(res);
@@ -202,10 +220,143 @@ export default function DatabaseStudio({ onDataRefreshed }: DatabaseStudioProps)
     sound.playSuccessChime();
   };
 
+  const handleVerifyToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tokenInput.trim()) {
+      sound.playErrorBuzz();
+      setTokenError('Harap masukkan token keamanan!');
+      return;
+    }
+
+    setIsVerifying(true);
+    setTokenError('');
+
+    try {
+      const res = await api.verifySecurityToken('DB_STUDIO_ACCESS', tokenInput.trim());
+      if (res && res.success) {
+        sessionStorage.setItem('ep_db_auth_session', res.tokenSessionId || `SES_${Date.now()}`);
+        setIsAuthorized(true);
+        sound.playSuccessChime();
+      } else {
+        sound.playErrorBuzz();
+        setTokenError(res?.error || 'Token Otorisasi Database tidak valid! Akses ditolak.');
+      }
+    } catch (err: any) {
+      sound.playErrorBuzz();
+      setTokenError(err.message || 'Gagal memverifikasi token ke server.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleLockStudio = () => {
+    sessionStorage.removeItem('ep_db_auth_session');
+    setIsAuthorized(false);
+    setTokenInput('');
+    setTokenError('');
+    sound.playTapConfirm();
+  };
+
+  // IF NOT AUTHORIZED: RENDER TOKEN CONFIRMATION GATE
+  if (!isAuthorized) {
+    return (
+      <div className="max-w-xl mx-auto my-6 animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-white rounded-2xl shadow-md border border-slate-200/90 overflow-hidden">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-950 p-6 text-white text-center relative">
+            <div className="w-14 h-14 rounded-2xl bg-teal-500/20 border border-teal-400/30 text-teal-400 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-teal-500/10">
+              <Shield className="w-7 h-7 animate-pulse-soft" />
+            </div>
+            <h2 className="text-base font-extrabold text-white tracking-tight">
+              Otorisasi Keamanan Database
+            </h2>
+            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+              Menu <strong>Uji Database & SQL</strong> dilindungi oleh token otorisasi khusus administrator.
+            </p>
+          </div>
+
+          {/* Form Content */}
+          <form onSubmit={handleVerifyToken} className="p-6 space-y-5">
+            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-slate-600">
+              <Lock className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">
+                Silakan masukkan <strong>Token Otorisasi Database</strong> untuk membuka konsol pengujian koneksi, eksekusi schema DDL, dan inspeksi tabel.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Token Otorisasi *
+              </label>
+              <div className="relative">
+                <input
+                  type={showToken ? 'text' : 'password'}
+                  required
+                  autoFocus
+                  placeholder="Masukkan Token"
+                  value={tokenInput}
+                  onChange={(e) => {
+                    setTokenInput(e.target.value);
+                    if (tokenError) setTokenError('');
+                  }}
+                  className="w-full px-4 py-2.5 pr-11 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-mono tracking-wider text-slate-800 uppercase"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(!showToken)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-md transition-colors cursor-pointer"
+                  title={showToken ? 'Sembunyikan Token' : 'Tampilkan Token'}
+                >
+                  {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {tokenError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700 flex items-center gap-2 animate-in fade-in duration-150">
+                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{tokenError}</span>
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end gap-3">
+              {onCancel && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Batal & Kembali
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={isVerifying}
+                className="px-5 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 active:scale-[0.98] rounded-xl shadow-md shadow-teal-600/20 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+              >
+                {isVerifying ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Memverifikasi...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>Konfirmasi & Buka Akses</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-150">
       {/* Header Section */}
-      <div className="bg-white rounded-xl shadow-xs border border-gray-100 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-xl shadow-xs border border-gray-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg">
@@ -213,21 +364,21 @@ export default function DatabaseStudio({ onDataRefreshed }: DatabaseStudioProps)
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-gray-900">Integrasi Database Supabase & Schema SQL</h1>
-                <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-100 text-emerald-800">
-                  Supabase Ready
+                <h1 className="text-base font-bold text-gray-900">Integrasi Database Supabase & Schema SQL</h1>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800">
+                  SUPABASE ONLINE
                 </span>
               </div>
-              <p className="text-sm text-gray-500">
-                Pusat manajemen database Supabase PostgreSQL, hashing password bcrypt, inisialisasi schema DDL, dan inspeksi data.
+              <p className="text-xs text-gray-500">
+                Pusat manajemen database SUPABASE ONLINE, hashing password bcrypt, inisialisasi schema DDL, dan inspeksi data.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Global Connection Badge */}
-        <div className="flex items-center gap-3">
-          <div className={`px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 border ${
+        {/* Global Connection Badge & Lock Action */}
+        <div className="flex items-center gap-2.5">
+          <div className={`px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 border ${
             dbState.connected 
               ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
               : dbState.configured
@@ -248,9 +399,18 @@ export default function DatabaseStudio({ onDataRefreshed }: DatabaseStudioProps)
             onClick={fetchStatus}
             disabled={loadingStatus}
             title="Muat Ulang Status"
-            className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 cursor-pointer"
+            className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${loadingStatus ? 'animate-spin text-emerald-600' : ''}`} />
+          </button>
+
+          <button
+            onClick={handleLockStudio}
+            title="Kunci Kembali Akses Database"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition-colors cursor-pointer"
+          >
+            <Lock className="w-3.5 h-3.5 text-slate-500" />
+            <span className="hidden sm:inline">Kunci Akses</span>
           </button>
         </div>
       </div>
@@ -352,7 +512,7 @@ export default function DatabaseStudio({ onDataRefreshed }: DatabaseStudioProps)
                         <div className="font-semibold">{testResult.message}</div>
                         {testResult.success && (
                           <div className="text-xs opacity-90 space-y-0.5 font-mono pt-1">
-                            <div>• Provider: <b>Supabase PostgreSQL</b></div>
+                            <div>• Provider: <b>SUPABASE ONLINE</b></div>
                             <div>• Project ID: <b>{testResult.databaseName}</b></div>
                             <div>• Latency: <b>{testResult.latencyMs} ms</b></div>
                             <div>• Server Time: <b>{testResult.serverTime}</b></div>
@@ -445,7 +605,7 @@ export default function DatabaseStudio({ onDataRefreshed }: DatabaseStudioProps)
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
                 <Server className="w-4 h-4 text-emerald-600" />
-                Status & Jumlah Data Tabel Supabase PostgreSQL
+                Status & Jumlah Data Tabel SUPABASE ONLINE
               </h3>
               <span className="text-xs text-gray-500">Auto-synced via Supabase API</span>
             </div>

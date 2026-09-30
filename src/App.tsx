@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getBooks, getMembers, getTransactions, saveBooks, saveMembers, saveTransactions, initializeDatabase, getRolePermissions, saveRolePermissions, getKelas, saveKelas, getSiswa, saveSiswa } from './utils/initialData';
 import { Book, Member, Transaction, UserRole, RolePermissions, KelasItem, SiswaItem } from './types/library';
 import { api } from './utils/api';
@@ -12,6 +12,7 @@ import RiwayatPeminjaman from './components/RiwayatPeminjaman';
 import BukuPinjaman from './components/BukuPinjaman';
 import DataPeminjamBuku from './components/DataPeminjamBuku';
 import DatabaseStudio from './components/DatabaseStudio';
+import GlobalSearch from './components/GlobalSearch';
 import LandingPage from './components/LandingPage';
 import { Language, TRANSLATIONS } from './utils/translations';
 import sound from './utils/audio';
@@ -55,6 +56,19 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isManajemenBukuOpen, setIsManajemenBukuOpen] = useState<boolean>(true);
   const [isKelolaAnggotaOpen, setIsKelolaAnggotaOpen] = useState<boolean>(true);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState<boolean>(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close user dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Active Role and RBAC States
   const [currentRole, setCurrentRole] = useState<UserRole>(() => {
@@ -162,7 +176,7 @@ export default function App() {
   const handleEditSiswa = async (item: SiswaItem) => {
     const updated = siswa.map(s => s.id === item.id ? item : s);
     handleUpdateSiswa(updated);
-    api.saveStudent(item).catch(err => console.warn('API sync warning:', err));
+    api.updateStudent(item).catch(err => console.warn('API sync warning:', err));
   };
 
   const handleDeleteSiswa = async (id: string) => {
@@ -191,6 +205,7 @@ export default function App() {
     setIsLoggedIn(false);
     localStorage.removeItem('ep_logged_in');
     localStorage.removeItem('ep_current_user');
+    sessionStorage.removeItem('ep_db_auth_token');
     sound.playTapConfirm();
   };
 
@@ -237,9 +252,10 @@ export default function App() {
   };
 
   // Add Member
-  const handleAddMember = (newMember: Member) => {
+  const handleAddMember = async (newMember: Member) => {
     const updated = [newMember, ...members];
     handleUpdateMembers(updated);
+    api.saveMember(newMember).catch(err => console.warn('API sync warning:', err));
   };
 
   // Toggle member suspended status
@@ -692,41 +708,8 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Enhanced Sidebar Footer: Operator Card, Hardware Status, and Creation Year & IT Attribution */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-950 shrink-0 space-y-2.5">
-          {/* Operator Profile Card */}
-          <div className="flex items-center justify-between bg-slate-900/90 px-2.5 py-2 rounded-xl border border-slate-800/80 shadow-xs">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6.5 h-6.5 rounded-lg bg-teal-500/10 border border-teal-500/30 text-teal-400 font-bold text-xs flex items-center justify-center shrink-0">
-                {(currentUser?.name || 'A').slice(0, 1)}
-              </div>
-              <div className="min-w-0">
-                <div className="text-[11px] font-bold text-slate-200 truncate leading-tight">
-                  {currentUser?.name || 'Administrator'}
-                </div>
-                <div className="text-[9px] font-mono text-teal-400 font-semibold leading-tight">
-                  {currentRole}
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              title="Keluar dari Akun"
-              className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Hardware Status */}
-          <div className="flex items-center justify-between px-1 text-[10px] text-slate-400 font-mono">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>RFID Scanner: Siap</span>
-            </div>
-            <span className="text-slate-500 text-[9px]">Port COM-4</span>
-          </div>
-
+        {/* Sidebar Footer: Creation Year & IT Attribution Footer */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950 shrink-0">
           {/* Dedicated Creation Year & IT Creator Attribution Footer */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-950 border border-slate-800/90 rounded-xl p-3 shadow-xs space-y-2">
             <div className="flex items-center justify-between">
@@ -776,12 +759,26 @@ export default function App() {
       {/* ========================================================= */}
       <main className="flex-1 flex flex-col min-w-0 md:h-screen md:overflow-y-auto">
         
-        {/* TOP BAR CONTRACT: Contextual breadcrumbs on left, actions/meta on right */}
-        <header className="hidden md:flex items-center justify-between px-8 py-4.5 border-b border-slate-200/60 bg-white shrink-0 z-30">
-          <div className="text-xs font-bold tracking-wide text-slate-400 uppercase font-mono">
+        {/* TOP BAR CONTRACT: Contextual breadcrumbs on left, Global Search in middle, actions/profile on right */}
+        <header className="hidden md:flex items-center justify-between px-8 py-3 border-b border-slate-200/60 bg-white shrink-0 z-30 gap-4">
+          <div className="text-xs font-bold tracking-wide text-slate-400 uppercase font-mono shrink-0">
             {getBreadcrumbsText()}
           </div>
-          <div className="flex items-center gap-3">
+
+          {/* Center Global Search Bar */}
+          <div className="flex-1 max-w-md mx-auto">
+            <GlobalSearch 
+              books={books}
+              siswa={siswa}
+              members={members}
+              transactions={transactions}
+              onNavigate={(tab) => {
+                setActiveTab(tab);
+              }}
+            />
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
             <button 
               onClick={() => setActiveTab('database')}
               title="Klik untuk membuka Pengujian & Schema Database"
@@ -792,29 +789,81 @@ export default function App() {
               }`}
             >
               <div className={`w-2 h-2 rounded-full ${dbStatus.connected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></div>
-              <span>{dbStatus.connected ? 'Supabase PostgreSQL' : 'Supabase Ready'}</span>
+              <span>{dbStatus.connected ? 'SUPABASE ONLINE' : 'Supabase Ready'}</span>
             </button>
 
-            <div className="flex items-center gap-2 bg-slate-100 border border-slate-200/80 rounded-xl px-3 py-1.5">
-              <div className="w-6 h-6 rounded-full bg-teal-600 text-white font-bold text-[10px] flex items-center justify-center">
-                {(currentUser?.name || 'A').slice(0, 1)}
-              </div>
-              <div className="text-left">
-                <span className="text-[11px] font-extrabold text-slate-800 block leading-none">
-                  {currentUser?.name || 'Administrator'}
-                </span>
-                <span className="text-[9px] font-mono font-bold text-teal-700 block mt-0.5">
-                  Hak Akses: {currentRole}
-                </span>
-              </div>
+            {/* Profile Dropdown Component */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center gap-2.5 bg-slate-50 hover:bg-slate-100/90 border border-slate-200/90 hover:border-slate-300 rounded-xl px-3 py-1.5 transition-all cursor-pointer shadow-2xs group select-none"
+                aria-expanded={isUserMenuOpen}
+              >
+                <div className="w-7 h-7 rounded-lg bg-teal-600 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                  {(currentUser?.name || 'A').slice(0, 1)}
+                </div>
+                <div className="text-left">
+                  <span className="text-xs font-bold text-slate-800 block leading-tight">
+                    {currentUser?.name || 'Administrator'}
+                  </span>
+                  <span className="text-[10px] font-medium text-teal-700 block leading-tight">
+                    {currentRole}
+                  </span>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isUserMenuOpen ? 'rotate-180 text-teal-600' : 'group-hover:text-slate-600'}`} />
+              </button>
+
+              {/* Animated Floating Dropdown */}
+              {isUserMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100/90 py-2 z-50 animate-in fade-in zoom-in-95 duration-150 transform origin-top-right">
+                  {/* Account Header */}
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white font-black text-sm flex items-center justify-center shadow-md shadow-teal-500/20">
+                        {(currentUser?.name || 'A').slice(0, 1)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-slate-900 truncate">
+                          {currentUser?.name || 'Administrator'}
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-500 truncate">
+                          @{currentUser?.username || 'admin'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-slate-50">
+                      <span className="text-[10px] text-slate-400 font-medium">Hak Akses:</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200/60 font-mono">
+                        {currentRole}
+                      </span>
+                    </div>
+
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 font-medium">Status Akun:</span>
+                      <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Aktif
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="p-1.5">
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        handleLogout();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer text-left"
+                    >
+                      <LogOut className="w-4 h-4 text-rose-500" />
+                      <span>Keluar Aplikasi</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-
-            <button
-              onClick={handleLogout}
-              className="px-3.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-colors cursor-pointer"
-            >
-              Keluar
-            </button>
           </div>
         </header>
 
@@ -928,6 +977,10 @@ export default function App() {
 
           {(activeTab === 'database' || activeTab === 'uji_database') && (
             <DatabaseStudio 
+              onCancel={() => {
+                setActiveTab('dashboard');
+                sound.playTapConfirm();
+              }}
               onDataRefreshed={async () => {
                 try {
                   const [apiBooks, apiClasses, apiStudents, apiMembers, apiTransactions] = await Promise.all([

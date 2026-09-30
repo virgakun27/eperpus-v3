@@ -1,4 +1,4 @@
-import { getDb, isDatabaseConfigured } from './neon.js';
+import { getDb, isDatabaseConfigured } from './neon.ts';
 
 export async function initializeNeonDatabase() {
   if (!isDatabaseConfigured) {
@@ -175,14 +175,14 @@ export async function initializeNeonDatabase() {
         ON CONFLICT (id) DO NOTHING;
       `;
 
-      // Seed Users
+      // Seed Users (Pengelola Sistem: Admin, Guru, Petugas Perpus, Kepsek)
       await sql`
         INSERT INTO users (id, name, username, email, password_hash, role, status, rfid_card)
         VALUES 
           ('U001', 'Administrator Perpustakaan', 'admin.super', 'admin@sman1lumbung.sch.id', 'admin123', 'Admin', 'Aktif', 'RFID-ADM-001'),
           ('U002', 'Drs. H. Mulyana, M.Pd.', 'guru', 'mulyana@sman1lumbung.sch.id', 'guru123', 'Guru', 'Aktif', 'RFID-GUR-1975001'),
-          ('U003', 'Dr. H. Suherman, M.Pd.', 'kepsek', 'kepsek@sman1lumbung.sch.id', 'kepsek123', 'Kepsek', 'Aktif', 'RFID-KEP-001'),
-          ('U004', 'Budi Santoso', 'siswa', 'budi.santoso@sman1lumbung.sch.id', 'siswa123', 'Siswa', 'Aktif', 'RFID-SIS-2026001')
+          ('U003', 'Dewi Lestari, S.Pd.', 'petugas.perpus', 'dewi.perpus@sman1lumbung.sch.id', 'perpus123', 'Petugas Perpus', 'Aktif', 'RFID-STF-001'),
+          ('U004', 'Dr. H. Suherman, M.Pd.', 'kepsek', 'kepsek@sman1lumbung.sch.id', 'kepsek123', 'Kepsek', 'Aktif', 'RFID-KEP-001')
         ON CONFLICT (id) DO NOTHING;
       `;
 

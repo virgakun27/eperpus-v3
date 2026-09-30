@@ -153,6 +153,17 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- G. TABEL TOKEN KEAMANAN SISTEM (SECURITY TOKENS)
+CREATE TABLE IF NOT EXISTS security_tokens (
+    id VARCHAR(50) PRIMARY KEY,
+    token_key VARCHAR(100) UNIQUE NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    description VARCHAR(255),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ==============================================================================
 -- 4. PERFORMANCE INDEXES
 -- ==============================================================================
@@ -299,16 +310,23 @@ ON CONFLICT (id) DO UPDATE SET
     stock = EXCLUDED.stock,
     available_stock = EXCLUDED.available_stock;
 
--- Data Pengguna Sistem (Password ter-hash: 'admin123', 'guru123', 'kepsek123', 'siswa123')
+-- Data Pengguna Sistem (Staf/Manajemen Perpustakaan: Admin, Guru, Kepsek)
 INSERT INTO users (id, name, username, email, password_hash, role, status, rfid_card)
 VALUES 
     ('U001', 'Administrator Perpustakaan', 'admin.super', 'admin@sman1lumbung.sch.id', '$2b$10$cxBHgsrPC/FRYvg0xnZJfO22ByOYtdgzPVUKCQvDGr.kae3tq6f6i', 'Admin', 'Aktif', 'RFID-ADM-001'),
     ('U002', 'Drs. H. Mulyana, M.Pd.', 'guru', 'mulyana@sman1lumbung.sch.id', '$2b$10$aZh7zfK1t4sTKMKc39GYLOEKuLAkQiFeUUZwfsAecqye71JRX5lsa', 'Guru', 'Aktif', 'RFID-GUR-1975001'),
-    ('U003', 'Dr. H. Suherman, M.Pd.', 'kepsek', 'kepsek@sman1lumbung.sch.id', '$2b$10$eSEMChxeEZ6wTz8I3bW5AO0IJz8.DOV.ntWCMAeAEQ/I6Yu.6zGKG', 'Kepsek', 'Aktif', 'RFID-KEP-001'),
-    ('U004', 'Budi Santoso', 'siswa', 'budi.santoso@sman1lumbung.sch.id', '$2b$10$MUpKwel.EWj6zTVVhgxSleLUAhQQQ.2grcaxEsPtZzlWM/S2Dmcn2', 'Siswa', 'Aktif', 'RFID-SIS-2026001')
+    ('U003', 'Dr. H. Suherman, M.Pd.', 'kepsek', 'kepsek@sman1lumbung.sch.id', '$2b$10$eSEMChxeEZ6wTz8I3bW5AO0IJz8.DOV.ntWCMAeAEQ/I6Yu.6zGKG', 'Kepsek', 'Aktif', 'RFID-KEP-001')
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     password_hash = EXCLUDED.password_hash;
+
+-- Data Token Keamanan Sistem (Tersimpan di Database)
+INSERT INTO security_tokens (id, token_key, token_hash, description, is_active)
+VALUES 
+    ('SEC_TOK_001', 'DB_STUDIO_ACCESS', '$2b$10$64Z/1z6Vq4D3K2tX6iV0O.gM0J0c8S2f5r.c7gV8z0Y1u.H3mK7i.', 'Token otorisasi akses modul Uji Database & Schema SQL', TRUE)
+ON CONFLICT (token_key) DO UPDATE SET
+    token_hash = EXCLUDED.token_hash,
+    is_active = EXCLUDED.is_active;
 
 -- Data Transaksi Sirkulasi
 INSERT INTO transactions (id, book_id, book_title, member_id, member_name, borrow_date, due_date, return_date, status, fine_amount, notes)

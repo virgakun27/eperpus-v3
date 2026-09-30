@@ -1,6 +1,6 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-import { hashPassword } from '../utils/password.js';
+import { hashPassword } from '../utils/password.ts';
 
 dotenv.config();
 
@@ -207,15 +207,24 @@ export async function seedSupabaseData(): Promise<{
     const { error: bksErr } = await client.from('books').upsert(initialBooks, { onConflict: 'id' });
     results.books = { inserted: bksErr ? 0 : initialBooks.length, error: bksErr?.message };
 
-    // 5. Users (with bcrypt password hashing)
+    // 5. Users (Staff / Pengguna Sistem: Admin, Guru, Kepsek - Siswa tidak masuk tabel users)
     const initialUsers = [
       { id: 'U001', name: 'Administrator Perpustakaan', username: 'admin.super', email: 'admin@sman1lumbung.sch.id', password_hash: hashPassword('admin123'), role: 'Admin', status: 'Aktif', rfid_card: 'RFID-ADM-001' },
       { id: 'U002', name: 'Drs. H. Mulyana, M.Pd.', username: 'guru', email: 'mulyana@sman1lumbung.sch.id', password_hash: hashPassword('guru123'), role: 'Guru', status: 'Aktif', rfid_card: 'RFID-GUR-1975001' },
-      { id: 'U003', name: 'Dr. H. Suherman, M.Pd.', username: 'kepsek', email: 'kepsek@sman1lumbung.sch.id', password_hash: hashPassword('kepsek123'), role: 'Kepsek', status: 'Aktif', rfid_card: 'RFID-KEP-001' },
-      { id: 'U004', name: 'Budi Santoso', username: 'siswa', email: 'budi.santoso@sman1lumbung.sch.id', password_hash: hashPassword('siswa123'), role: 'Siswa', status: 'Aktif', rfid_card: 'RFID-SIS-2026001' }
+      { id: 'U003', name: 'Dr. H. Suherman, M.Pd.', username: 'kepsek', email: 'kepsek@sman1lumbung.sch.id', password_hash: hashPassword('kepsek123'), role: 'Kepsek', status: 'Aktif', rfid_card: 'RFID-KEP-001' }
     ];
     const { error: usrErr } = await client.from('users').upsert(initialUsers, { onConflict: 'id' });
     results.users = { inserted: usrErr ? 0 : initialUsers.length, error: usrErr?.message };
+
+    // 6. Transactions
+    const initialTransactions = [
+      { id: 'TRX-1001', book_id: 'B001', book_title: 'Laskar Pelangi', member_id: 'M001', member_name: 'Budi Santoso', borrow_date: '2026-09-24', due_date: '2026-09-28', return_date: null, status: 'Terlambat', fine_amount: 2000.00, notes: 'Keterlambatan 2 hari kerja' },
+      { id: 'TRX-1002', book_id: 'B003', book_title: 'Filosofi Teras', member_id: 'M001', member_name: 'Budi Santoso', borrow_date: '2026-09-28', due_date: '2026-10-02', return_date: null, status: 'Berlangsung', fine_amount: 0.00, notes: 'Peminjaman aktif' },
+      { id: 'TRX-1003', book_id: 'B002', book_title: 'Bumi Manusia', member_id: 'M002', member_name: 'Siti Rahmawati', borrow_date: '2026-09-29', due_date: '2026-10-03', return_date: null, status: 'Berlangsung', fine_amount: 0.00, notes: 'Peminjaman aktif' },
+      { id: 'TRX-1004', book_id: 'B004', book_title: 'Pulang', member_id: 'M003', member_name: 'Ahmad Hidayat', borrow_date: '2026-09-20', due_date: '2026-09-24', return_date: '2026-09-25T08:00:00Z', status: 'Selesai', fine_amount: 0.00, notes: 'Tepat waktu' }
+    ];
+    const { error: trxErr } = await client.from('transactions').upsert(initialTransactions, { onConflict: 'id' });
+    results.transactions = { inserted: trxErr ? 0 : initialTransactions.length, error: trxErr?.message };
 
     const hasErrors = Object.values(results).some(r => !!r.error);
 

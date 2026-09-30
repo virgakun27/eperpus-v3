@@ -8,6 +8,11 @@ export const INITIAL_ROLE_PERMISSIONS: RolePermissions[] = [
     allowedActions: ['edit_buku', 'hapus_buku', 'edit_anggota', 'proses_peminjaman', 'proses_pengembalian', 'unduh_laporan']
   },
   {
+    role: 'Petugas Perpus',
+    allowedMenus: ['dashboard', 'sirkulasi_peminjaman', 'sirkulasi_pengembalian', 'katalog', 'manajemen_buku', 'data_peminjam_buku', 'anggota', 'riwayat'],
+    allowedActions: ['edit_buku', 'edit_anggota', 'proses_peminjaman', 'proses_pengembalian', 'unduh_laporan']
+  },
+  {
     role: 'Guru',
     allowedMenus: ['dashboard', 'katalog', 'data_peminjam_buku', 'riwayat'],
     allowedActions: ['unduh_laporan']
@@ -112,50 +117,50 @@ const INITIAL_BOOKS: Book[] = [
   }
 ];
 
-// Pre-seeded Members in Indonesian
+// Pre-seeded Members in Indonesian (Aligned with Supabase Schema)
 const INITIAL_MEMBERS: Member[] = [
   {
-    id: 'A001',
+    id: 'M001',
     name: 'Budi Santoso',
     status: 'Aktif',
-    rfidCard: 'RFID-MEM-A001',
-    type: 'Mahasiswa',
-    email: 'budi.santoso@mahasiswa.univ.ac.id',
-    phone: '0812-3456-7890',
+    rfidCard: 'RFID-SIS-2026001',
+    type: 'Siswa',
+    email: 'budi.santoso@sman1lumbung.sch.id',
+    phone: '0812-3456-7891',
+    maxBooks: 3,
+    activeLoansCount: 2
+  },
+  {
+    id: 'M002',
+    name: 'Siti Rahmawati',
+    status: 'Aktif',
+    rfidCard: 'RFID-SIS-2026002',
+    type: 'Siswa',
+    email: 'siti.rahmawati@sman1lumbung.sch.id',
+    phone: '0812-3456-7892',
     maxBooks: 3,
     activeLoansCount: 1
   },
   {
-    id: 'A002',
-    name: 'Prof. Dr. Siti Rahmawati',
-    status: 'Aktif',
-    rfidCard: 'RFID-MEM-A002',
-    type: 'Dosen',
-    email: 'siti.rahma@dosen.univ.ac.id',
-    phone: '0811-9876-5432',
-    maxBooks: 5,
-    activeLoansCount: 1
-  },
-  {
-    id: 'A003',
+    id: 'M003',
     name: 'Ahmad Hidayat',
     status: 'Aktif',
-    rfidCard: 'RFID-MEM-A003',
-    type: 'Mahasiswa',
-    email: 'ahmad.hidayat@mahasiswa.univ.ac.id',
-    phone: '0813-2244-6688',
+    rfidCard: 'RFID-SIS-2026003',
+    type: 'Siswa',
+    email: 'ahmad.hidayat@sman1lumbung.sch.id',
+    phone: '0812-3456-7893',
     maxBooks: 3,
-    activeLoansCount: 0
+    activeLoansCount: 1
   },
   {
-    id: 'A004',
-    name: 'Dewi Lestari',
-    status: 'Ditangguhkan',
-    rfidCard: 'RFID-MEM-A004',
-    type: 'Mahasiswa',
-    email: 'dewi.lestari@mahasiswa.univ.ac.id',
-    phone: '0815-5555-7777',
-    maxBooks: 3,
+    id: 'M004',
+    name: 'Drs. H. Mulyana, M.Pd.',
+    status: 'Aktif',
+    rfidCard: 'RFID-GUR-1975001',
+    type: 'Dosen',
+    email: 'mulyana@sman1lumbung.sch.id',
+    phone: '0813-2211-9988',
+    maxBooks: 5,
     activeLoansCount: 0
   }
 ];
@@ -187,7 +192,7 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
     bookId: 'B005', // Dilan 1990
     bookTitle: 'Dilan: Dia adalah Dilanku tahun 1990',
     memberId: 'A002', // Siti Rahmawati
-    memberName: 'Prof. Dr. Siti Rahmawati',
+    memberName: 'Virga Mahardhika Koswara, S.T',
     borrowDate: getRelativeISOString(-12), // 12 hari lalu
     dueDate: getRelativeISOString(-5),    // Harus kembali 5 hari lalu -> Terlambat!
     returnDate: null,
@@ -213,31 +218,45 @@ const INITIAL_TRANSACTIONS: Transaction[] = [
 export const INITIAL_USERS: UserAccount[] = [
   {
     id: 'U001',
-    name: 'Admin Perpus',
+    name: 'Administrator Perpustakaan',
     username: 'admin.super',
     email: 'admin.super@sman1lumbung.sch.id',
     role: 'Admin',
     password: 'admin123',
+    rfidCard: 'RFID-ADM-001',
     status: 'Aktif',
     createdAt: '2026-01-15'
   },
   {
     id: 'U002',
-    name: 'Dewi Lestari, S.Pd.',
-    username: 'dewi.pustaka',
-    email: 'dewi.l@sman1lumbung.sch.id',
+    name: 'Drs. H. Mulyana, M.Pd.',
+    username: 'guru',
+    email: 'mulyana@sman1lumbung.sch.id',
     role: 'Guru',
-    password: 'admin123',
+    password: 'guru123',
+    rfidCard: 'RFID-GUR-1975001',
     status: 'Aktif',
     createdAt: '2026-03-22'
   },
   {
     id: 'U003',
-    name: 'Drs. H. Mulyana, M.Pd.',
-    username: 'kepsek.utama',
+    name: 'Dewi Lestari, S.Pd.',
+    username: 'petugas.perpus',
+    email: 'dewi.perpus@sman1lumbung.sch.id',
+    role: 'Petugas Perpus',
+    password: 'perpus123',
+    rfidCard: 'RFID-STF-001',
+    status: 'Aktif',
+    createdAt: '2026-04-10'
+  },
+  {
+    id: 'U004',
+    name: 'Dr. H. Suherman, M.Pd.',
+    username: 'kepsek',
     email: 'kepsek@sman1lumbung.sch.id',
     role: 'Kepsek',
-    password: 'admin123',
+    password: 'kepsek123',
+    rfidCard: 'RFID-KEP-001',
     status: 'Aktif',
     createdAt: '2026-09-01'
   }
@@ -344,10 +363,10 @@ export const saveSiswa = (siswaList: SiswaItem[]) => {
   
   // Sync students to ep_members so RFID scanning and loans work in circulation desk
   const currentMembers: Member[] = JSON.parse(localStorage.getItem('ep_members') || '[]');
-  const nonSiswaMembers = currentMembers.filter(m => m.type !== 'Siswa' && !m.id.startsWith('SIS-'));
+  const nonSiswaMembers = currentMembers.filter(m => m.type !== 'Siswa' && !m.id.startsWith('SIS-') && !m.id.startsWith('M_') && !['M001', 'M002', 'M003'].includes(m.id));
   
-  const studentMembers: Member[] = siswaList.map(s => ({
-    id: `SIS-${s.id}`,
+  const studentMembers: Member[] = siswaList.map((s, idx) => ({
+    id: s.id === 'S001' ? 'M001' : s.id === 'S002' ? 'M002' : s.id === 'S003' ? 'M003' : `M_${s.id}`,
     name: `${s.name} (${s.kelasName})`,
     status: s.status === 'Aktif' ? 'Aktif' : 'Ditangguhkan',
     rfidCard: s.rfidCard,

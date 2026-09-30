@@ -4,7 +4,7 @@ import { relations } from 'drizzle-orm';
 // ==============================================================================
 // 1. ENUMS
 // ==============================================================================
-export const userRoleEnum = pgEnum('user_role', ['Admin', 'Guru', 'Siswa', 'Kepsek']);
+export const userRoleEnum = pgEnum('user_role', ['Admin', 'Petugas Perpus', 'Guru', 'Kepsek', 'Siswa']);
 export const memberStatusEnum = pgEnum('member_status', ['Aktif', 'Ditangguhkan', 'Nonaktif']);
 export const memberTypeEnum = pgEnum('member_type', ['Siswa', 'Mahasiswa', 'Dosen', 'Staf', 'Umum']);
 export const bookStatusEnum = pgEnum('book_status', ['Tersedia', 'Dipinjam', 'Hilang', 'Rusak']);
@@ -108,6 +108,17 @@ export const users = pgTable('users', {
   role: userRoleEnum('role').default('Admin').notNull(),
   status: memberStatusEnum('status').default('Aktif').notNull(),
   rfidCard: varchar('rfid_card', { length: 100 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
+// G. Security Tokens Table (Stores server-side access tokens securely in DB)
+export const securityTokens = pgTable('security_tokens', {
+  id: varchar('id', { length: 50 }).primaryKey(),
+  tokenKey: varchar('token_key', { length: 100 }).unique().notNull(), // e.g. 'DB_STUDIO_ACCESS'
+  tokenHash: varchar('token_hash', { length: 255 }).notNull(),
+  description: varchar('description', { length: 255 }),
+  isActive: varchar('is_active', { length: 10 }).default('true').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

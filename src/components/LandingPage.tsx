@@ -291,12 +291,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <div className="w-full h-px bg-slate-800 opacity-40"></div>
                   <div className="w-full h-px bg-slate-800 opacity-40"></div>
                 </div>
-                <span className="font-mono text-[8px] text-teal-400/70 tracking-widest uppercase font-bold">NFC PASSIVE</span>
+                <span className="font-mono text-[8px] text-teal-400/70 tracking-widest uppercase font-bold">RFID PASSIVE</span>
               </div>
               <div>
                 <span className="block text-[8px] font-mono text-slate-500 uppercase leading-none">MEMBER IDENTITY</span>
-                <span className="block text-sm font-bold tracking-wide mt-1">Prof. Dr. Siti Rahmawati</span>
-                <span className="block text-[9px] font-mono text-teal-400 mt-1">RFID-MEM-A002</span>
+                <span className="block text-sm font-bold tracking-wide mt-1">Virga Mahardhika Koswara</span>
+                <span className="block text-[9px] font-mono text-teal-400 mt-1">RFID-MEM-A001</span>
               </div>
             </div>
 

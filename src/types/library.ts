@@ -72,7 +72,8 @@ export interface ScannerState {
   scannedType: 'member' | 'book' | null;
 }
 
-export type UserRole = 'Admin' | 'Guru' | 'Siswa' | 'Kepsek';
+export type StaffRole = 'Admin' | 'Guru' | 'Petugas Perpus' | 'Kepsek';
+export type UserRole = StaffRole | 'Siswa';
 
 export interface UserAccount {
   id: string; // e.g. U001
@@ -80,7 +81,8 @@ export interface UserAccount {
   username: string;
   email?: string; // Optional
   password?: string; // Optional
-  role: UserRole;
+  role: StaffRole | UserRole;
+  rfidCard?: string;
   status: 'Aktif' | 'Nonaktif';
   createdAt: string;
 }

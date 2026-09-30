@@ -23,6 +23,10 @@ export const RiwayatPeminjaman: React.FC<RiwayatPeminjamanProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Semua');
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10); // Default 10 data per page
+
   // Format currency
   const formatRupiah = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -46,10 +50,21 @@ export const RiwayatPeminjaman: React.FC<RiwayatPeminjamanProps> = ({
     return matchesSearch && matchesStatus;
   });
 
+  // Reset page on search or filter change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeFilter, transactions.length]);
+
   // Sort descending by borrow date
   const sortedTransactions = [...filteredTransactions].sort((a, b) => {
     return new Date(b.borrowDate).getTime() - new Date(a.borrowDate).getTime();
   });
+
+  const totalPages = Math.ceil(sortedTransactions.length / itemsPerPage);
+  const paginatedTransactions = sortedTransactions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   // CSV Export logic
   const handleExportCSV = () => {
@@ -142,7 +157,7 @@ export const RiwayatPeminjaman: React.FC<RiwayatPeminjamanProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {sortedTransactions.map(t => {
+              {paginatedTransactions.map(t => {
                 const isOverdue = t.status === 'Terlambat';
                 const isReturned = t.status === 'Selesai';
 
@@ -231,6 +246,76 @@ export const RiwayatPeminjaman: React.FC<RiwayatPeminjamanProps> = ({
             <p className="text-sm text-slate-400">Tidak ada riwayat transaksi sirkulasi.</p>
           </div>
         )}
+
+        {/* Pagination Controls */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-3.5 border-t border-slate-100 text-xs bg-slate-50/50">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 font-medium text-xs">Tampilkan:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                  sound.playTapConfirm();
+                }}
+                className="bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer shadow-2xs"
+              >
+                <option value={5}>5 data</option>
+                <option value={10}>10 data</option>
+                <option value={20}>20 data</option>
+                <option value={50}>50 data</option>
+                <option value={100}>100 data</option>
+              </select>
+            </div>
+            <span className="text-slate-500">
+              Menampilkan <span className="font-semibold text-slate-800 font-mono">{sortedTransactions.length === 0 ? 0 : ((currentPage - 1) * itemsPerPage) + 1}</span> -{' '}
+              <span className="font-semibold text-slate-800 font-mono">{Math.min(currentPage * itemsPerPage, sortedTransactions.length)}</span> dari{' '}
+              <span className="font-semibold text-slate-800 font-mono">{sortedTransactions.length}</span> transaksi
+            </span>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  setCurrentPage(p => Math.max(1, p - 1));
+                  sound.playTapConfirm();
+                }}
+                disabled={currentPage === 1}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer font-semibold transition-colors shadow-2xs"
+              >
+                Sebelumnya
+              </button>
+              {Array.from({ length: totalPages }).map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setCurrentPage(i + 1);
+                    sound.playTapConfirm();
+                  }}
+                  className={`w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center transition-all cursor-pointer ${
+                    currentPage === i + 1
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'border border-slate-200 text-slate-600 hover:bg-white bg-slate-50/50'
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  setCurrentPage(p => Math.min(totalPages, p + 1));
+                  sound.playTapConfirm();
+                }}
+                disabled={currentPage === totalPages}
+                className="px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer font-semibold transition-colors shadow-2xs"
+              >
+                Selanjutnya
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
