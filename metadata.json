@@ -1,0 +1,10 @@
+{
+  "name": "PustakaRFID",
+  "description": "Sistem Informasi E-Perpustakaan modern terintegrasi dengan simulasi tap kartu RFID Anggota, tag RFID Buku, dan pemindaian QR Code (Kamera & Virtual Scanner) untuk sirkulasi peminjaman dan pengembalian buku yang efisien.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
